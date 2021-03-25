@@ -1,0 +1,275 @@
+---
+title: "SNA Assignment | Juan Buero"
+output: html_notebook
+---
+
+```{r,echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, fig.showtext=FALSE}
+## Load libraries that are going to be used throughout the file
+library('igraph')
+library("dplyr")
+library("stringr")
+```
+
+
+On this first assignment, applying the basic functions of the Igraph package is required. The following datasets are going to be used:
+
+* Actors dataset - undirected graph - : For the 2005 Graph Drawing conference a data set was provided of the IMDB movie database. We will use a reduced version of this dataset, which derived all actor-actor collaboration edges where the actors co-starred in at least 2 movies together between 1995 and 2004. 
+
+
+You have to complete the code chunks in this document but also analyze the results, extract insights and answer the short questions. Fill the CSV attached with your answers, sometimes just the number is enough, some others just a small sentence. Remember to change the header with your email.
+
+In your submission please upload both the R Markdown and the CSV with the solutions.
+
+
+# Loading data
+
+In this section, the goal is loading the datasets given, building the graph and analyzing basics metrics. Include the edge or node attributes you consider.
+
+Describe the values provided by summary function on the graph object.
+*1) How many nodes are there?*
+There are 17577 nodes
+*2) How many edges are there?*
+There are 287074 edges
+
+```{r, echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, fig.showtext=FALSE}
+
+##Set working directory
+dir <- dirname(rstudioapi::getActiveDocumentContext()$path)
+setwd(dir)
+
+##Read data
+actors_edges <- read.table("imdb_actor_edges.tsv", header=TRUE, sep="\t")
+actors_keys <- read.table("imdb_actors_key.tsv", header=TRUE, sep="\t")
+
+##Analyze data
+dim(actors_edges)
+dim(actors_keys)
+head(actors_keys)
+head(actors_edges)
+
+##Graph edges and vertices
+g <- graph.data.frame(d =actors_edges, vertices=actors_keys, directed = FALSE)
+
+## Combine multiple edges by adding their weights
+g <- simplify(g, remove.multiple = TRUE, 
+              remove.loops=TRUE, edge.attr.comb=list(weight="sum","ignore"))
+
+##Plot igraph object
+plot(g, edge.arrow.size=.4,vertex.label=NA, vertex.size=6, edge.curved=0.1,
+     layout=layout_nicely)
+
+##Count vertices and edges
+vcount(g)
+ecount(g)
+is_directed(g)
+
+##Query name of vertex's attributes
+vertex_attr_names(g)
+
+##Query name of edge's attributes
+edge_attr_names(g)
+```
+
+
+# Degree distribution
+
+
+Analyse the degree distribution. Compute the total degree distribution.
+*3) How does this distributions look like?*
+The graph is undirected and it's distribution seems to be logarithmic
+*4) What is the maximum degree?*
+784
+*5) What is the minium degree?*
+1
+```{r}
+
+##Define degree of igraph object
+V(g)$deg <- degree(g, mode="all")
+
+##Find MAX and MIN degree and respective actors
+max(V(g)$deg); V(g)[degree(g)==max(degree(g))]
+min(V(g)$deg); V(g)[degree(g)==min(degree(g))]
+
+##Plot degree distribution
+deg.dist <- degree_distribution(g, cumulative=T, mode="all")
+
+plot( x=0:max(V(g)$deg), y=1-deg.dist, pch=19, cex=1.2, col="green", 
+      xlab="Degree", ylab="Cumulative Frequency")
+
+##Plot degree histogram
+hist(V(g)$deg, main="Histogram of node degree", breaks=seq(0,800,20),xlab = "Vertex Degree",
+     col="red", labels = TRUE)
+```
+
+
+
+
+
+# Network Diameter and Average Path Length
+*6) What is the diameter of the graph?*
+39
+*7) What is the avg path length of the graph?*
+4.890546
+```{r}
+## Get Diameter
+diam <- diameter(g, directed = FALSE)
+diam
+
+## Get average path
+avg_path <- mean_distance(g, directed = FALSE)
+avg_path
+```
+
+
+# Node importance: Centrality measures
+
+Obtain the distribution of the number of movies made by an actor and the number of genres in which an actor starred in. It may be useful to analyze and discuss the results to be obtained in the following exercises.
+
+```{r}
+## Get count of genres per actor
+gnr_count <- sapply(strsplit(as.character(actors_keys$genres), ","), length)
+V(g)$gnr_count <- gnr_count
+
+## Plot histogram for genres per actor
+hist(V(g)$gnr_count, main = "Number of genres per actor", xlab = "Number of genres", 
+     labels = TRUE, col = "skyblue", breaks = seq(0,20,1), ylab = "Number of actors")
+
+## Plot histogram for movies per actor
+hist(V(g)$movies_95_04, main = "Number of movies per actor", xlab = "Number of movies", 
+     col = "skyblue", breaks = seq(0,580,5), ylab = "Number of actors")
+```
+
+Obtain three vectors with the degree, betweenness and closeness for each vertex of the actors' graph.
+
+```{r}
+
+##Calculate betweenness
+bt <- betweenness(g, v = V(g), directed = FALSE)
+V(g)$bt <- bt
+
+## Get degree vector
+deg <- degree(g, mode="all")
+
+## Calculate closeness and vector
+cl <- closeness(g, v = V(g), mode = "all")
+V(g)$cl <- cl
+```
+
+
+Obtain the list of the 20 actors with the largest degree centrality. It can be useful to show a list with the degree, the name of the actor, the number of movies, the main genre, and the number of genres in which the actor has participated.
+
+*8) Who is the actor with highest degree centrality?* Mark Davis with a degree centrality
+value of 784.
+*9) How do you explain the high degree of the top-20 list??*
+Degree centrality measure the amount of edges that a node has. We can say that these 20 people are the best connected in the graph and therefore will have the best acting opportunities.
+```{r}
+vertex_attr_names(g)
+
+## Merge calculated metrics into a single dataframe
+top <- data.frame(actors_keys$name, deg,cl, bt,
+                  actors_keys$movies_95_04, actors_keys$main_genre,
+                  gnr_count)
+
+## Order dataframe by degree in descending mode and show top 20
+head(top[order(top$deg, decreasing=TRUE),], 20)
+```
+
+
+
+
+Obtain the list of the 20 actors with the largest betweenness centrality. Show a list with the betweenness, the name of the actor, the number of movies, the main genre, and the number of genres in which the actor has participated.
+*10) Who is the actor with highest betweenes?*Jeremy Ron with a betweenness value of 8433928.
+*11) How do you explain the high betweenness of the top-20 list?* Betweenness measures how information "flows" in a network. These 20 people are the most influential and people rely on them to connect with other people in the network.
+```{r}
+#What is the max betweenness?
+max(V(g)$bt) 
+
+#Which actor has the highest betweenness?
+V(g)[betweenness(g)==max(betweenness(g))]
+
+
+top <- data.frame(actors_keys$name, bt, deg,cl, actors_keys$movies_95_04,
+                  actors_keys$main_genre, gnr_count)
+
+## Order dataframe by betweenness in descending mode and show top 20
+head(top[order(top$bt, decreasing=TRUE),], 20)
+```
+
+
+
+
+
+Obtain the list of the 20 actors with the largest closeness centrality. Show a list with the closeness the name of the actor, the number of movies, the main genre, and the number of genres in which the actor has participated.
+
+*12) Who is the actor with highest closeness centrality?* Cameron Diaz with 4.410807e-07.
+*13) How do you explain the high closeness of the top-20 list? * Closeness measures the importance of a node by it distance to the rest of the nodes. The people with highest closeness are those who are located closer to the center of the network than other actors in it. These are the "closest" actors to more actors.
+```{r}
+max(V(g)$cl) 
+
+top <- data.frame(actors_keys$name, cl, bt, deg, actors_keys$movies_95_04,
+                  actors_keys$main_genre, gnr_count)
+
+head(top[order(top$cl, decreasing=TRUE),], 20)
+```
+
+
+
+# Network Models (Optional)
+Explore the Erdös-Renyi model and compare its structural properties to those of real-world networks (actors):
+
+```{r}
+## Choose values for n and p
+n=1000
+p=0.1
+
+## With chosen values, generate GNP random model and plot
+er <- sample_gnp(n=n, p=p)
+plot(er, vertex.size=5, vertex.label=NA, edge.arrow.size=.4, layout=layout_randomly)
+
+## Calculate degree and plot degree distribution and histogram
+V(er)$deg <- degree(er, mode = "all")
+er.dist <- degree_distribution(er, cumulative = T)
+
+plot( x=0:max(V(er)$deg), y=1-er.dist, pch=19, cex=1.2, col="orange", 
+      xlab="Degree", ylab="Cumulative Frequency")
+
+hist(V(er)$deg, main="Histogram of node degree",xlab = "Vertex Degree",
+     col="orange", labels = TRUE)
+
+## Find diameter and path length
+diameter(er, directed = F)
+average.path.length(er, directed = F)
+```
+
+
+*Degree distribution  P(k)* The higher the probability and the amount of nodes, the more the distribution looks like a normal distribution.
+*Network Diameter and Average Path Length* Even after experimenting the model with 10000 nodes, the diameter and average path length are really small and for 10000 nodes the values were even smaller than for 1000 nodes.
+*(Global and Local) Clustering Coefficient* 
+```{r include=FALSE}
+transitivity(er, type ="global")
+transitivity(er, type ="local")
+```
+
+
+# Comunity detection (Optional)
+*Use any community detection algorithm for the actors' network and discuss whether the communities found make sense according to the vertex labels.*
+```{r}
+# Remove isolated nodes
+g.isolated <- which(degree(g)==1)
+g2 <- delete.vertices(g, g.isolated)
+
+# Find communities using the greedy method
+g.comm <- fastgreedy.community(g2)
+
+# Plot the communities in the graph
+plot(g.comm, g2, vertex.label=NA, vertex.size=6, layout= layout_nicely)
+```
+To detect communities within the network, first I deleted those nodes that where unconnected and then, I used the hierarchical greedy method from Lovain because other methods such as the divisive took too long (left it running for 4 hours and didn't finish).
+After running the algorithm and reviewing the results, one can see that the results make sense, for example in community number 2, almost all actors have Spanish last names. This makes sense and we could say that community number 2 is the Spanish actors community.
+In community number 3, there are celebrities such as Oprah, Jay Leno and Jimmy Kimmel which all have their own TV talk shows and there are many actors who have been on those shows so this third community also makes sense.
+
+```{r}
+# Analyze actors and their communities
+communities(g.comm)
+```
+
